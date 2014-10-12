@@ -1,14 +1,8 @@
 #ifndef DS4WIIBT_H
 #define DS4WIIBT_H
 
-#include <stdio.h>
 #include <gccore.h>
-#include <unistd.h>
-#include <bte/bte.h>
-#include "utils.h"
-#include "btpbuf.h"
 #include "l2cap.h"
-#include "hci.h"
 
 #undef LOG
 #define LOG printf
@@ -22,11 +16,76 @@ enum ds4wiibt_status {
 	DS4WIIBT_STATUS_CONNECTED,
 };
 
+struct ds4wiibt_input {
+	unsigned char leftX;
+	unsigned char leftY;
+	unsigned char rightX;
+	unsigned char rightY;
+	struct {
+		unsigned char triangle : 1;
+		unsigned char circle   : 1;
+		unsigned char cross    : 1;
+		unsigned char square   : 1;
+		unsigned char dpad     : 4;
+	};
+	struct {
+		unsigned char R3      : 1;
+		unsigned char L3      : 1;
+		unsigned char OPTIONS : 1;
+		unsigned char SHARE   : 1;
+		unsigned char R2      : 1;
+		unsigned char L2      : 1;
+		unsigned char R1      : 1;
+		unsigned char L1      : 1;
+	};
+	struct {
+		unsigned char counter : 6;
+		unsigned char TPAD    : 1;
+		unsigned char PS      : 1;
+	};
+	unsigned char triggerL;
+	unsigned char triggerR;
+	unsigned char timestamp[2];
+	unsigned char battery;
+	struct {
+		unsigned short accX;
+		unsigned short accY;
+		unsigned short accZ;
+		unsigned short roll;
+		unsigned short yaw;
+		unsigned short pitch;
+	};
+	unsigned char unk1[5];
+	struct {
+		unsigned char unused     : 1;
+		unsigned char microphone : 1;
+		unsigned char headphones : 1;
+		unsigned char cable      : 1;
+		unsigned char batt_level : 4;
+	};
+	unsigned char unk2[2];
+	unsigned char trackpad_pkts;
+	unsigned char packet_count;
+	struct {
+		unsigned int active : 1;
+		unsigned int ID     : 7;
+		unsigned int X      : 12;
+		unsigned int Y      : 12;
+	} finger1;
+	struct {
+		unsigned int active : 1;
+		unsigned int ID     : 7;
+		unsigned int X      : 12;
+		unsigned int Y      : 12;
+	} finger2;
+} __attribute__((packed, aligned(32)));
+
 struct ds4wiibt_context {
 	struct l2cap_pcb *sdp_pcb;
 	struct l2cap_pcb *ctrl_pcb;
 	struct l2cap_pcb *data_pcb;
 	struct bd_addr	  bdaddr;
+	struct ds4wiibt_input input;
 	struct {
 		unsigned char r, g, b;
 		unsigned char on, off;

@@ -1,8 +1,15 @@
+#include <stdio.h>
+#include <unistd.h>
+#include <ogc/machine/processor.h>
+#include <bte/bte.h>
 #include "ds4wiibt.h"
+#include "hci.h"
+#include "btpbuf.h"
 
 static int senddata_raw(struct l2cap_pcb *pcb, void *message, u16 len);
 static int set_operational(struct ds4wiibt_context *ctx);
 static int send_output_report(struct ds4wiibt_context *ctx);
+static void correct_input(struct ds4wiibt_input *inp);
 
 static err_t l2ca_connect_cfm_cb_ctrl_data(void *arg, struct l2cap_pcb *pcb, u16 result, u16 status);
 static err_t l2ca_connect_ind_cb_sdp(void *arg, struct l2cap_pcb *pcb, err_t err);
@@ -22,9 +29,10 @@ void ds4wiibt_initialize(struct ds4wiibt_context *ctx)
 	ctx->ctrl_pcb = NULL;
 	ctx->data_pcb = NULL;
 	memset(&ctx->bdaddr, 0, sizeof(ctx->bdaddr));
+	memset(&ctx->input,  0, sizeof(ctx->input));
 	ds4wiibt_set_led_rgb(ctx, 0x00, 0x00, 0xFF);
 	ds4wiibt_set_led_blink(ctx, 0xFF, 0x00);
-	ds4wiibt_set_rumble(ctx, 0xF0, 0xF0);
+	ds4wiibt_set_rumble(ctx, 0x00, 0x00);
 	ctx->usrdata = NULL;
 	ctx->connect_cb = NULL;
 	ctx->disconnect_cb = NULL;
@@ -73,9 +81,6 @@ void ds4wiibt_send_ledsrumble(struct ds4wiibt_context *ctx)
 
 void ds4wiibt_connect(struct ds4wiibt_context *ctx, struct bd_addr *addr)
 {
-	LOG("Connecting to: ");
-	print_mac(addr);
-	
 	u32 level = IRQ_Disable();
 	
 	bd_addr_set(&ctx->bdaddr, addr);
@@ -105,38 +110,38 @@ void ds4wiibt_connect(struct ds4wiibt_context *ctx, struct bd_addr *addr)
 	l2cap_connect_ind(ctx->sdp_pcb, &ctx->bdaddr, SDP_PSM, l2ca_connect_ind_cb_sdp);
 
 	IRQ_Restore(level);
-
-	LOG("Connect function finished\n");
 }
 
 void ds4wiibt_close(struct ds4wiibt_context *ctx)
 {
 	//Turn OFF the LED and Rumble
-	ds4wiibt_set_led_rgb(ctx, 0xFF,0xFF,0x0);
 	ds4wiibt_set_led_blink(ctx, 0x00, 0xFF);
 	ds4wiibt_set_rumble(ctx, 0x00, 0x00);
 	ds4wiibt_send_ledsrumble(ctx);
 	if (is_connected(ctx)) {
-		if (ctx->sdp_pcb)  l2ca_disconnect_req(ctx->sdp_pcb, l2ca_disconnect_cfm_cb);
+		if (ctx->sdp_pcb)  l2ca_disconnect_req(ctx->sdp_pcb,  l2ca_disconnect_cfm_cb);
 		if (ctx->ctrl_pcb) l2ca_disconnect_req(ctx->ctrl_pcb, l2ca_disconnect_cfm_cb);
 		if (ctx->data_pcb) l2ca_disconnect_req(ctx->data_pcb, l2ca_disconnect_cfm_cb);
 	} else {
 		if (ctx->sdp_pcb)  l2cap_close(ctx->sdp_pcb);
 		if (ctx->ctrl_pcb) l2cap_close(ctx->ctrl_pcb);
 		if (ctx->data_pcb) l2cap_close(ctx->data_pcb);
+		ctx->sdp_pcb  = NULL;
+		ctx->ctrl_pcb = NULL;
+		ctx->data_pcb = NULL;
 	}
-	while (is_connected(ctx)) usleep(10);
-	LOG("CLOSED\n");
+	while (is_connected(ctx)) usleep(50);
 }
 
 static err_t l2ca_recv_cb(void *arg, struct l2cap_pcb *pcb, struct pbuf *p, err_t err)
 {
 	struct ds4wiibt_context *ctx = (struct ds4wiibt_context *)arg;
-	if (ctx == NULL || pcb == NULL) return -1;
+	if (ctx == NULL || pcb == NULL || err != ERR_OK) return -1;
+
+	u8 *rd = p->payload;
 	
-	//LOG("l2ca_recv_cb, PSM: %i\n", l2cap_psm(pcb));
-	#define P(i) (((u8*)p->payload)[i])
-	//LOG("len: %i | 0x%X  0x%X  0x%X  0x%X  0x%X\n", p->len, P(0), P(1), P(2), P(3), P(4));
+	//LOG("RECV, PSM: %i  len: %i |", l2cap_psm(pcb), p->len);
+	//LOG(" 0x%X  0x%X  0x%X  0x%X  0x%X\n", rd[0], rd[1], rd[2], rd[3], rd[4]);
 	
 	switch (l2cap_psm(pcb))	{
 	case SDP_PSM:
@@ -144,6 +149,15 @@ static err_t l2ca_recv_cb(void *arg, struct l2cap_pcb *pcb, struct pbuf *p, err_
 	case HIDP_PSM:
 		break;
 	case INTR_PSM:
+		switch (rd[1]) {
+		case 0x11: //Full report
+			memcpy(&ctx->input, rd + 4, sizeof(ctx->input));
+			correct_input(&ctx->input);
+			break;
+		case 0x01: //Short report
+			memcpy(&ctx->input, rd + 4, 9);
+			break;
+		}
 		break;
 	}
 
@@ -245,7 +259,6 @@ static err_t l2ca_disconnect_cfm_cb(void *arg, struct l2cap_pcb *pcb)
 	
 	LOG("l2ca_disconnect_cfm_cb, PSM: %i\n", l2cap_psm(pcb));
 	
-
 	switch (l2cap_psm(pcb))	{
 	case SDP_PSM:
 		l2cap_close(ctx->sdp_pcb);
@@ -260,7 +273,6 @@ static err_t l2ca_disconnect_cfm_cb(void *arg, struct l2cap_pcb *pcb)
 		ctx->data_pcb = NULL;
 		break;
 	}
-
 	//User has finished it, so don't listen again
 	if ((ctx->sdp_pcb == NULL) && (ctx->ctrl_pcb == NULL) && (ctx->data_pcb == NULL)) {
 		ctx->status = DS4WIIBT_STATUS_DISCONNECTED;
@@ -326,6 +338,25 @@ static int senddata_raw(struct l2cap_pcb *pcb, void *message, u16 len)
 	btpbuf_free(p);
 
 	return err;
+}
+
+static void correct_input(struct ds4wiibt_input *inp)
+{
+	inp->roll  = bswap16(inp->roll);
+	inp->yaw   = bswap16(inp->yaw);
+	inp->pitch = bswap16(inp->pitch);
+	inp->accX  = bswap16(inp->accX);
+	inp->accY  = bswap16(inp->accY);
+	inp->accZ  = bswap16(inp->accZ);
+
+	register u8 *p8 = (u8*)&inp->finger1 + 1;
+	inp->finger1.X = p8[0] | (p8[1]&0xF)<<8;
+	inp->finger1.Y = ((p8[1]&0xF0)>>4) | (p8[2]<<4);
+	inp->finger1.active = !inp->finger1.active;
+	p8 += 4;
+	inp->finger2.X = p8[0] | (p8[1]&0xF)<<8;
+	inp->finger2.Y = ((p8[1]&0xF0)>>4) | (p8[2]<<4);
+	inp->finger2.active = !inp->finger2.active;
 }
 
 static int set_operational(struct ds4wiibt_context *ctx)
