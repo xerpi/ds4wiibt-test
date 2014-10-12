@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
 		u32 pressed = WPAD_ButtonsDown(0);
 		if (pressed & WPAD_BUTTON_HOME) run = 0;
 
-		if (is_connected((&ctx))) print_data(&ctx.input);
+		if (is_connected(&ctx)) print_data(&ctx.input);
 		
 		flip_screen();
 	}

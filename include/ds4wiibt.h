@@ -111,6 +111,6 @@ void ds4wiibt_connect(struct ds4wiibt_context *ctx, struct bd_addr *addr);
 void ds4wiibt_close(struct ds4wiibt_context *ctx);
 
 #define is_connected(ctxp) \
-	(ctxp->status == DS4WIIBT_STATUS_CONNECTED)
+	((ctxp)->status == DS4WIIBT_STATUS_CONNECTED)
 
 #endif
