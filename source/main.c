@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <gccore.h>
+#include <fat.h>
 #include <wiiuse/wpad.h>
 #include "ds4wiibt.h"
 #include "utils.h"
+#include "ds4wiibt_config.h"
 
 static void print_data(struct ds4wiibt_input *inp);
 static void conn_cb(void *usrdata);
@@ -11,52 +13,71 @@ static void discon_cb(void *usrdata);
 
 int main(int argc, char *argv[])
 {
-	SYS_SetResetCallback(button_cb);
-	SYS_SetPowerCallback(button_cb);
+	fatInitDefault();
 	WPAD_Init();
 	init_video();
+	SYS_SetResetCallback(button_cb);
+	SYS_SetPowerCallback(button_cb);
 	printf("ds4wiibt by xerpi\n");
-	
-	struct bd_addr addr;
-	//PUT YOUR DS4 MAC HERE
-	BD_ADDR(&addr, 0xC5, 0x18, 0x2A, 0x6D, 0x66, 0x1C);	
 
-	int i = 5;
+	struct ds4wiibt_config_ctx conf;
+	ds4wiibt_config_initialize(&conf);
+	
+	if (!ds4wiibt_config_read(DS4WIIBT_CONFIG_FILE, &conf)) {
+		printf("Could not open config file.\n");
+		printf("Make sure to run ds4wii pair tool first.\n");
+		while (run) {
+			WPAD_ScanPads();
+			u32 pressed = WPAD_ButtonsDown(0);
+			if (pressed & WPAD_BUTTON_HOME) run = 0;
+			flip_screen();
+		}
+		return 0;
+	}
+	printf("Read %i DS4 MACs\n", conf.hdr.n_devices);
+	struct bd_addr addr, addr_rev;
+	//We need to reverse the MAC address
+	addr_rev.addr[0] =  conf.MAC_list[0][5];
+	addr_rev.addr[1] =  conf.MAC_list[0][4];
+	addr_rev.addr[2] =  conf.MAC_list[0][3];
+	addr_rev.addr[3] =  conf.MAC_list[0][2];
+	addr_rev.addr[4] =  conf.MAC_list[0][1];
+	addr_rev.addr[5] =  conf.MAC_list[0][0];
+
 	struct ds4wiibt_context ctx;
 	ds4wiibt_initialize(&ctx);
-	ds4wiibt_set_user_data(&ctx, &i);
+	ds4wiibt_set_user_data(&ctx, NULL);
 	ds4wiibt_set_connect_cb(&ctx, conn_cb);
 	ds4wiibt_set_disconnect_cb(&ctx, discon_cb);
 
 	LOG("Connecting to: ");
-	print_mac(&addr);
-	ds4wiibt_connect(&ctx, &addr);
+	print_mac((struct bd_addr*)conf.MAC_list[0]);
+	ds4wiibt_connect(&ctx, &addr_rev);
 	printf("Listening for an incoming connection...\n");
 
-	printf("MAIN LOOP\n");
 	while (run) {
 		WPAD_ScanPads();
 		u32 pressed = WPAD_ButtonsDown(0);
 		if (pressed & WPAD_BUTTON_HOME) run = 0;
-
-		if (is_connected(&ctx)) print_data(&ctx.input);
-		
+		if (is_connected(&ctx)) {
+			print_data(&ctx.input);
+			if (ctx.input.PS && ctx.input.OPTIONS) run = 0;
+		}
 		flip_screen();
 	}
 	ds4wiibt_close(&ctx);
+	ds4wiibt_config_free(&conf);
 	return 0;
 }
 
 static void conn_cb(void *usrdata)
 {
-	int *i = (int *)usrdata;
-	printf("Controller connected: %i\n", *i);
+	printf("Controller connected.\n");
 }
 
 static void discon_cb(void *usrdata)
 {
-	int *i = (int *)usrdata;
-	printf("Controller disconnected: %i\n", *i);
+	printf("Controller disconnected.\n");
 }
 
 static void print_data(struct ds4wiibt_input *inp)
