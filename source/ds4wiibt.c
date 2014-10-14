@@ -342,12 +342,12 @@ static int senddata_raw(struct l2cap_pcb *pcb, void *message, u16 len)
 
 static void correct_input(struct ds4wiibt_input *inp)
 {
-	inp->roll  = bswap16(inp->roll);
-	inp->yaw   = bswap16(inp->yaw);
-	inp->pitch = bswap16(inp->pitch);
-	inp->accX  = bswap16(inp->accX);
-	inp->accY  = bswap16(inp->accY);
-	inp->accZ  = bswap16(inp->accZ);
+	inp->gyroX  = bswap16(inp->gyroX);
+	inp->gyroY  = bswap16(inp->gyroY);
+	inp->gyroZ  = bswap16(inp->gyroZ);
+	inp->accelX = bswap16(inp->accelX);
+	inp->accelY = bswap16(inp->accelY);
+	inp->accelZ = bswap16(inp->accelZ);
 
 	register u8 *p8 = (u8*)&inp->finger1 + 1;
 	inp->finger1.X = p8[0] | (p8[1]&0xF)<<8;

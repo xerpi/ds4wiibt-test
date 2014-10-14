@@ -100,7 +100,7 @@ static void print_data(struct ds4wiibt_input *inp)
             inp->headphones, inp->microphone, inp->cable, inp->batt_level);    
 
     printf("aX: %5hi  aY: %5hi  aZ: %5hi  roll: %5hi  yaw: %5hi  pitch: %5hi\n", \
-            inp->accX, inp->accY, inp->accZ, inp->roll, inp->yaw, inp->pitch);
+            inp->accelX, inp->accelY, inp->accelZ, inp->roll, inp->yaw, inp->pitch);
 
     printf("Ltrigger: %2X   Rtrigger: %2X  trackpadpackets: %4i  packetcnt: %4i\n", \
             inp->triggerL, inp->triggerR, inp->trackpad_pkts, inp->packet_count);

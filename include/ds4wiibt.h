@@ -48,12 +48,21 @@ struct ds4wiibt_input {
 	unsigned char timestamp[2];
 	unsigned char battery;
 	struct {
-		short accX;
-		short accY;
-		short accZ;
-		short roll;
-		short yaw;
-		short pitch;
+		short accelX;
+		short accelY;
+		short accelZ;
+		union {
+			short gyroZ;
+			short roll;
+		};
+		union {
+			short gyroY;
+			short yaw;
+		};
+		union {
+			short gyroX;
+			short pitch;
+		};
 	};
 	unsigned char unk1[5];
 	struct {
