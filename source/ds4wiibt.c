@@ -180,8 +180,8 @@ static err_t l2ca_connect_cfm_cb_ctrl_data(void *arg, struct l2cap_pcb *pcb, u16
 		break;
 	case INTR_PSM:
 		/* All the PSM are connected! */
+		ctx->status = DS4WIIBT_STATUS_CONNECTED;
 		if (ctx->connect_cb != NULL) {
-			ctx->status = DS4WIIBT_STATUS_CONNECTED;
 			//Notify the user
 			ctx->connect_cb(ctx->usrdata);
 		}
